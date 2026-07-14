@@ -1,0 +1,115 @@
+:root {
+  /* ============ Dark (default) — VietTrade terminal theme ============ */
+  --color-primary: #22D3B8;
+  --color-primary-hover: #3EE5CB;
+  --color-primary-rgb: 34, 211, 184;
+  --color-secondary: #F0B429;
+  --color-secondary-hover: #FFC94D;
+  --color-secondary-rgb: 240, 180, 41;
+  --color-success: #22C55E;
+  --color-danger: #F0475A;
+  --color-warning: #F0B429;
+  --color-info: #38BDF8;
+
+  --color-bg-base: #080B12;
+  --color-bg-surface: #0D1119;
+  --color-bg-elevated: #131826;
+  --color-bg-elevated-2: #1A2033;
+  --color-border: #212840;
+  --color-border-strong: #2E3757;
+  --color-text-primary: #EEF1F8;
+  --color-text-secondary: #8890AC;
+  --color-text-disabled: #4A5273;
+
+  /* Price colors - fixed, domain-required (VN market convention), brightened for dark bg */
+  --price-up: #22C55E;
+  --price-down: #F0475A;
+  --price-ceiling: #C084FC;
+  --price-floor: #38BDF8;
+  --price-reference: #F0B429;
+
+  /* Typography */
+  --font-family-base: 'Inter', 'SF Pro', system-ui, -apple-system, sans-serif;
+  --font-family-display: 'Space Grotesk', 'Inter', sans-serif;
+  --font-family-mono: 'JetBrains Mono', 'Roboto Mono', 'SF Mono', monospace;
+
+  /* Elevation */
+  --elevation-0: none;
+  --elevation-1: 0 1px 2px rgba(0,0,0,0.24);
+  --elevation-2: 0 4px 12px rgba(0,0,0,0.32);
+  --elevation-3: 0 12px 28px rgba(0,0,0,0.42);
+  --elevation-4: 0 24px 48px rgba(0,0,0,0.52);
+  --glow-primary: 0 0 0 1px rgba(var(--color-primary-rgb), 0.25), 0 0 24px rgba(var(--color-primary-rgb), 0.18);
+  --glow-secondary: 0 0 0 1px rgba(var(--color-secondary-rgb), 0.25), 0 0 24px rgba(var(--color-secondary-rgb), 0.16);
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-full: 999px;
+
+  /* Spacing (4px base) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Motion */
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 300ms;
+  --easing-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --easing-decelerate: cubic-bezier(0, 0, 0.2, 1);
+
+  color-scheme: dark;
+}
+
+[data-theme='light'] {
+  --color-primary: #0F9C87;
+  --color-primary-hover: #0C7E6D;
+  --color-primary-rgb: 15, 156, 135;
+  --color-secondary: #B8790F;
+  --color-secondary-hover: #96630C;
+  --color-secondary-rgb: 184, 121, 15;
+  --color-success: #16A34A;
+  --color-danger: #DC2A3F;
+  --color-warning: #B8790F;
+  --color-info: #0284C7;
+
+  --color-bg-base: #FFFFFF;
+  --color-bg-surface: #F5F6FA;
+  --color-bg-elevated: #FFFFFF;
+  --color-bg-elevated-2: #EEF0F7;
+  --color-border: #E3E6EF;
+  --color-border-strong: #CBD0E0;
+  --color-text-primary: #131A2C;
+  --color-text-secondary: #626B87;
+  --color-text-disabled: #A2A9C0;
+
+  --price-up: #16A34A;
+  --price-down: #DC2A3F;
+  --price-ceiling: #9333EA;
+  --price-floor: #0284C7;
+  --price-reference: #B8790F;
+
+  --elevation-1: 0 1px 2px rgba(20,24,40,0.06);
+  --elevation-2: 0 4px 10px rgba(20,24,40,0.08);
+  --elevation-3: 0 10px 24px rgba(20,24,40,0.12);
+  --elevation-4: 0 20px 40px rgba(20,24,40,0.16);
+
+  color-scheme: light;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
