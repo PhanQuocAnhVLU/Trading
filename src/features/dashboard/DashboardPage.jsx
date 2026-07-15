@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUpRight, ArrowDownRight, Wallet, PieChart, Flame } from 'lucide-react';
 import Card from '../../shared/components/Card';
@@ -18,6 +18,7 @@ import clsx from 'clsx';
 export default function DashboardPage() {
   const quotes = usePriceStore((s) => s.quotes);
   const indices = usePriceStore((s) => s.indices);
+  const loadHistory = usePriceStore((s) => s.loadHistory);
   const user = useAuthStore((s) => s.user);
   const holdings = useTradingStore((s) => s.holdings);
   const orders = useTradingStore((s) => s.orders);
@@ -26,6 +27,12 @@ export default function DashboardPage() {
 
   const topGainers = useMemo(() => [...list].sort((a, b) => b.changePct - a.changePct).slice(0, 5), [quotes]);
   const topLosers = useMemo(() => [...list].sort((a, b) => a.changePct - b.changePct).slice(0, 5), [quotes]);
+
+  useEffect(() => {
+    [...topGainers, ...topLosers].forEach((q) => {
+      if (q && !q.history) loadHistory(q.symbol, 20);
+    });
+  }, [topGainers, topLosers]);
 
   const { marketValue, costValue } = useMemo(() => {
     let mv = 0, cv = 0;
@@ -179,7 +186,7 @@ function MoverList({ items, positive }) {
             <p className="text-sm font-semibold font-data">{q.symbol}</p>
             <p className="text-xs text-text-secondary">{formatVolume(q.volume)}</p>
           </div>
-          <Sparkline data={q.history} positive={positive} width={64} height={28} />
+          <Sparkline data={q.history || []} positive={positive} width={64} height={28} />
           <div className="text-right">
             <PriceText current={q.price} ref={q.ref} ceiling={q.ceiling} floor={q.floor} className="text-sm font-semibold" />
             <p className={`text-xs font-data ${positive ? 'text-price-up' : 'text-price-down'}`}>{formatPercent(q.changePct)}</p>

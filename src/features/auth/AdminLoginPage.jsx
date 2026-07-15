@@ -12,7 +12,7 @@ export default function AdminLoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
     setError('');
     if (!form.email || !form.password) {
@@ -20,20 +20,20 @@ export default function AdminLoginPage() {
       return;
     }
     setLoading(true);
-    setTimeout(() => {
-      const result = login(form);
+    const result = await login(form);
+    if (!result.ok) {
       setLoading(false);
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-      if (result.ok && useAuthStore.getState().user?.role !== 'admin') {
-        useAuthStore.getState().logout();
-        setError('Tài khoản này không có quyền quản trị.');
-        return;
-      }
-      navigate('/admin', { replace: true });
-    }, 400);
+      setError(result.error);
+      return;
+    }
+    if (useAuthStore.getState().user?.role !== 'admin') {
+      await useAuthStore.getState().logout();
+      setLoading(false);
+      setError('Tài khoản này không có quyền quản trị. Thêm email vào biến môi trường ADMIN_EMAILS trên Vercel rồi đăng ký/đăng nhập lại.');
+      return;
+    }
+    setLoading(false);
+    navigate('/admin', { replace: true });
   }
 
   return (

@@ -54,8 +54,8 @@ export default function Sidebar({ collapsed }) {
 
       {!collapsed && (
         <div className="p-3 mx-2.5 mb-3 rounded-md border border-border bg-bg-elevated-2">
-          <p className="text-[10px] text-text-disabled uppercase tracking-widest font-semibold">Phiên demo</p>
-          <p className="text-xs text-text-secondary mt-1 leading-relaxed">Dữ liệu mô phỏng — không phải giao dịch thật.</p>
+          <p className="text-[10px] text-text-disabled uppercase tracking-widest font-semibold">Tiền ảo — dữ liệu thật</p>
+          <p className="text-xs text-text-secondary mt-1 leading-relaxed">Giá lấy thời gian thực từ thị trường. Lệnh khớp bằng tiền ảo, không phải tiền thật.</p>
         </div>
       )}
     </aside>

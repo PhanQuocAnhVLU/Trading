@@ -15,7 +15,7 @@ export default function LoginPage() {
 
   const dest = location.state?.from || '/';
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
     setError('');
     if (!form.email || !form.password) {
@@ -23,15 +23,13 @@ export default function LoginPage() {
       return;
     }
     setLoading(true);
-    setTimeout(() => {
-      const result = login(form);
-      setLoading(false);
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-      navigate(dest, { replace: true });
-    }, 500);
+    const result = await login(form);
+    setLoading(false);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    navigate(dest, { replace: true });
   }
 
   return (

@@ -15,6 +15,7 @@ export default function CandlestickChart({ history, height = 340 }) {
 
   useEffect(() => {
     if (!containerRef.current) return;
+    if (!history || history.length === 0) return;
 
     const styles = getComputedStyle(document.documentElement);
     const textColor = styles.getPropertyValue('--color-text-secondary').trim();
@@ -50,7 +51,7 @@ export default function CandlestickChart({ history, height = 340 }) {
 
     const n = history.length;
     const candleData = history.map((h, i) => ({
-      time: toDateStr(n - 1 - i),
+      time: h.date || toDateStr(n - 1 - i),
       open: Math.round(h.open), high: Math.round(h.high), low: Math.round(h.low), close: Math.round(h.close),
     }));
     candleSeries.setData(candleData);
@@ -62,7 +63,7 @@ export default function CandlestickChart({ history, height = 340 }) {
     chart.priceScale('volume').applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
 
     const volumeData = history.map((h, i) => ({
-      time: toDateStr(n - 1 - i),
+      time: h.date || toDateStr(n - 1 - i),
       value: h.volume,
       color: h.close >= h.open ? `${upColor}66` : `${downColor}66`,
     }));

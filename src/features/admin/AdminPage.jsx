@@ -1,29 +1,41 @@
-import { useState } from 'react';
-import { Ban, CheckCircle2, Wallet, Trash2, PauseCircle, PlayCircle, XCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Ban, CheckCircle2, Wallet, Trash2, PauseCircle, PlayCircle } from 'lucide-react';
 import Card from '../../shared/components/Card';
 import Badge from '../../shared/components/Badge';
 import Button from '../../shared/components/Button';
 import { useAuthStore } from '../auth/store/authStore';
-import { useTradingStore } from '../trading/store/tradingStore';
 import { usePriceStore } from '../../shared/store/priceStore';
+import { apiFetch } from '../../shared/lib/api';
 import { formatCurrency, formatDateTime } from '../../shared/lib/formatters';
 import { STOCK_UNIVERSE } from '../../shared/constants/stockUniverse';
 import clsx from 'clsx';
 
 export default function AdminPage() {
-  const { users, adminToggleBan, adminAdjustCash, adminDeleteUser } = useAuthStore();
-  const { orders, cancelOrder } = useTradingStore();
+  const { users, fetchUsers, adminToggleBan, adminAdjustCash, adminDeleteUser } = useAuthStore();
   const { quotes, haltedSymbols, toggleHalt } = usePriceStore();
   const symbolCount = Object.keys(quotes).length;
-  const [cashModal, setCashModal] = useState(null); // { email }
+  const [cashModal, setCashModal] = useState(null); // { uid, name }
   const [cashAmount, setCashAmount] = useState('');
+  const [orders, setOrders] = useState([]);
+  const [loadError, setLoadError] = useState('');
 
-  const pendingCount = orders.filter((o) => o.status === 'pending').length;
+  async function loadAll() {
+    setLoadError('');
+    try {
+      await fetchUsers();
+      const data = await apiFetch('/api/admin/orders');
+      setOrders(data.orders);
+    } catch (err) {
+      setLoadError(err.message);
+    }
+  }
 
-  function handleAdjustCash(email) {
+  useEffect(() => { loadAll(); }, []);
+
+  async function handleAdjustCash(uid) {
     const delta = Number(cashAmount);
     if (!delta) return;
-    adminAdjustCash(email, delta);
+    await adminAdjustCash(uid, delta);
     setCashModal(null);
     setCashAmount('');
   }
@@ -32,13 +44,16 @@ export default function AdminPage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-bold font-display text-text-primary">Quản trị hệ thống</h1>
-        <p className="text-sm text-text-secondary mt-1">Giám sát và quản lý người dùng, lệnh giao dịch, mã cổ phiếu.</p>
+        <p className="text-sm text-text-secondary mt-1">Giám sát và quản lý người dùng, lệnh giao dịch, mã cổ phiếu — dữ liệu thật từ Firestore.</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+      {loadError && (
+        <div className="text-sm bg-danger/10 border border-danger/30 text-danger rounded-md px-3 py-2">{loadError}</div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card><p className="text-xs text-text-secondary">Tổng người dùng</p><p className="text-lg font-bold font-data mt-1">{users.length}</p></Card>
-        <Card><p className="text-xs text-text-secondary">Tổng lệnh đã đặt</p><p className="text-lg font-bold font-data mt-1">{orders.length}</p></Card>
-        <Card><p className="text-xs text-text-secondary">Lệnh đang chờ khớp</p><p className="text-lg font-bold font-data mt-1">{pendingCount}</p></Card>
+        <Card><p className="text-xs text-text-secondary">Tổng lệnh đã khớp</p><p className="text-lg font-bold font-data mt-1">{orders.length}</p></Card>
         <Card><p className="text-xs text-text-secondary">Mã đang tạm dừng</p><p className="text-lg font-bold font-data mt-1">{Object.values(haltedSymbols).filter(Boolean).length}/{symbolCount}</p></Card>
       </div>
 
@@ -61,7 +76,7 @@ export default function AdminPage() {
               </thead>
               <tbody>
                 {users.map((u) => (
-                  <tr key={u.email} className={clsx('border-b border-border last:border-0', u.banned && 'opacity-50')}>
+                  <tr key={u.uid} className={clsx('border-b border-border last:border-0', u.banned && 'opacity-50')}>
                     <td className="px-4 py-2 font-medium">{u.fullName}</td>
                     <td className="px-4 py-2 text-text-secondary">{u.email}</td>
                     <td className="px-4 py-2 font-data text-text-secondary">{u.accountNo}</td>
@@ -72,21 +87,21 @@ export default function AdminPage() {
                     <td className="px-4 py-2">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
-                          onClick={() => { setCashModal({ email: u.email, name: u.fullName }); setCashAmount(''); }}
+                          onClick={() => { setCashModal({ uid: u.uid, name: u.fullName }); setCashAmount(''); }}
                           className="p-1.5 rounded-md text-text-secondary hover:text-primary hover:bg-bg-elevated-2"
                           title="Điều chỉnh số dư"
                         >
                           <Wallet size={15} />
                         </button>
                         <button
-                          onClick={() => adminToggleBan(u.email)}
+                          onClick={() => adminToggleBan(u.uid)}
                           className={clsx('p-1.5 rounded-md hover:bg-bg-elevated-2', u.banned ? 'text-success' : 'text-warning')}
                           title={u.banned ? 'Mở khoá tài khoản' : 'Khoá tài khoản'}
                         >
                           {u.banned ? <CheckCircle2 size={15} /> : <Ban size={15} />}
                         </button>
                         <button
-                          onClick={() => { if (confirm(`Xoá tài khoản ${u.email}?`)) adminDeleteUser(u.email); }}
+                          onClick={() => { if (confirm(`Xoá tài khoản ${u.email}?`)) adminDeleteUser(u.uid); }}
                           className="p-1.5 rounded-md text-text-secondary hover:text-danger hover:bg-bg-elevated-2"
                           title="Xoá tài khoản"
                         >
@@ -122,11 +137,11 @@ export default function AdminPage() {
             );
           })}
         </div>
-        <p className="text-xs text-text-secondary mt-3">Bấm vào mã để tạm dừng / mở lại giao dịch. Mã đang tạm dừng sẽ đứng giá và nhà đầu tư không thể đặt lệnh mới.</p>
+        <p className="text-xs text-text-secondary mt-3">Bấm vào mã để tạm dừng / mở lại giao dịch. Mã đang tạm dừng sẽ không cho phép đặt lệnh mới, áp dụng ngay cho toàn bộ người dùng.</p>
       </Card>
 
       {/* Order log */}
-      <Card title="Nhật ký lệnh toàn hệ thống" padded={false}>
+      <Card title="Nhật ký lệnh toàn hệ thống (200 lệnh gần nhất)" padded={false}>
         {orders.length === 0 ? (
           <p className="p-8 text-sm text-text-secondary text-center">Chưa có lệnh nào.</p>
         ) : (
@@ -134,39 +149,26 @@ export default function AdminPage() {
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-bg-elevated">
                 <tr className="text-left text-text-secondary border-b border-border">
-                  <th className="px-4 py-2 font-medium">Mã lệnh</th>
+                  <th className="px-4 py-2 font-medium">Người đặt</th>
                   <th className="px-4 py-2 font-medium">Mã CK</th>
                   <th className="px-4 py-2 font-medium">Loại</th>
                   <th className="px-4 py-2 font-medium text-right">KL</th>
                   <th className="px-4 py-2 font-medium text-right">Giá</th>
                   <th className="px-4 py-2 font-medium">Thời gian</th>
                   <th className="px-4 py-2 font-medium text-right">Trạng thái</th>
-                  <th className="px-4 py-2"></th>
                 </tr>
               </thead>
               <tbody>
                 {orders.map((o) => (
                   <tr key={o.id} className="border-b border-border last:border-0">
-                    <td className="px-4 py-2 font-data text-xs text-text-secondary">{o.id}</td>
+                    <td className="px-4 py-2 text-xs text-text-secondary">{o.email}</td>
                     <td className="px-4 py-2 font-data font-medium">{o.symbol}</td>
                     <td className="px-4 py-2"><Badge variant={o.side === 'BUY' ? 'success' : 'danger'}>{o.side === 'BUY' ? 'Mua' : 'Bán'}</Badge></td>
                     <td className="px-4 py-2 text-right font-data">{o.qty.toLocaleString('vi-VN')}</td>
                     <td className="px-4 py-2 text-right font-data">{formatCurrency(o.price)}</td>
-                    <td className="px-4 py-2 text-text-secondary text-xs">{formatDateTime(o.createdAt)}</td>
+                    <td className="px-4 py-2 text-text-secondary text-xs">{o.createdAt ? formatDateTime(o.createdAt) : '—'}</td>
                     <td className="px-4 py-2 text-right">
-                      <Badge variant={o.status === 'matched' ? 'success' : o.status === 'cancelled' ? 'neutral' : 'warning'}>
-                        {o.status === 'matched' ? 'Khớp' : o.status === 'cancelled' ? 'Huỷ' : 'Chờ'}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      {o.status === 'pending' && (
-                        <button
-                          onClick={() => cancelOrder(o.id)}
-                          className="text-xs text-danger hover:underline flex items-center gap-1 justify-end w-full"
-                        >
-                          <XCircle size={12} /> Buộc huỷ
-                        </button>
-                      )}
+                      <Badge variant="success">Khớp</Badge>
                     </td>
                   </tr>
                 ))}
@@ -190,7 +192,7 @@ export default function AdminPage() {
             />
             <div className="flex gap-2 mt-4">
               <Button variant="ghost" className="flex-1" onClick={() => setCashModal(null)}>Huỷ</Button>
-              <Button className="flex-1" onClick={() => handleAdjustCash(cashModal.email)}>Xác nhận</Button>
+              <Button className="flex-1" onClick={() => handleAdjustCash(cashModal.uid)}>Xác nhận</Button>
             </div>
           </div>
         </div>

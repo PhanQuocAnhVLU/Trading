@@ -45,7 +45,7 @@ export default function MarketPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold font-display text-text-primary">Bảng giá thị trường</h1>
-          <p className="text-sm text-text-secondary mt-1">Dữ liệu mô phỏng theo cấu trúc bảng giá HOSE.</p>
+          <p className="text-sm text-text-secondary mt-1">Dữ liệu thời gian thực theo cấu trúc bảng giá HOSE/HNX.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <MarketSessionBadge />

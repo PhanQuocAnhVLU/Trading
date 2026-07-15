@@ -1,74 +1,86 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { db } from '../../../shared/lib/firebase';
+import { apiFetch } from '../../../shared/lib/api';
+import { useAuthStore } from '../../auth/store/authStore';
 
-let orderSeq = 1;
+function toIso(ts) {
+  return ts?.toDate ? ts.toDate().toISOString() : null;
+}
 
-export const useTradingStore = create(
-  persist(
-    (set, get) => ({
-      orders: [], // { id, symbol, side, type, qty, price, status, createdAt, matchedAt }
-      holdings: {}, // symbol -> { qty, avgCost }
+export const useTradingStore = create((set, get) => ({
+  orders: [], // real orders for the signed-in user, live from Firestore
+  holdings: {}, // real holdings for the signed-in user, live from Firestore
+  _unsubOrders: null,
+  _unsubHoldings: null,
 
-      placeOrder: ({ symbol, side, type, qty, price, cashAvailable, onCash, onHolding }) => {
-        const orderValue = qty * price;
+  // Subscribes to this user's own orders + holdings in real time.
+  subscribe: (uid) => {
+    get().unsubscribe();
+    if (!uid) return;
 
-        if (side === 'BUY') {
-          if (orderValue > cashAvailable) {
-            return { ok: false, error: 'Số dư tiền mặt không đủ để đặt lệnh.' };
-          }
-        } else {
-          const holding = get().holdings[symbol];
-          const ownedQty = holding ? holding.qty : 0;
-          if (qty > ownedQty) {
-            return { ok: false, error: 'Khối lượng bán vượt quá số lượng sở hữu.' };
-          }
-        }
-
-        const order = {
-          id: 'ORD' + String(orderSeq++).padStart(6, '0') + '-' + Date.now(),
-          symbol, side, type, qty, price,
-          status: 'pending',
-          createdAt: new Date().toISOString(),
-          matchedAt: null,
-        };
-
-        set((s) => ({ orders: [order, ...s.orders] }));
-
-        // Reserve cash immediately for BUY (simulate margin hold)
-        if (side === 'BUY' && onCash) onCash(-orderValue);
-
-        // Simulate matching engine latency
-        setTimeout(() => {
-          set((s) => {
-            const orders = s.orders.map((o) => (o.id === order.id ? { ...o, status: 'matched', matchedAt: new Date().toISOString() } : o));
-            const holdings = { ...s.holdings };
-            const h = holdings[symbol] || { qty: 0, avgCost: 0 };
-            if (side === 'BUY') {
-              const totalCost = h.avgCost * h.qty + price * qty;
-              const newQty = h.qty + qty;
-              holdings[symbol] = { qty: newQty, avgCost: newQty ? totalCost / newQty : 0 };
-            } else {
-              const newQty = h.qty - qty;
-              holdings[symbol] = { qty: newQty, avgCost: newQty > 0 ? h.avgCost : 0 };
-              if (onCash) onCash(orderValue);
-            }
-            return { orders, holdings };
-          });
-          if (onHolding) onHolding();
-        }, 1800 + Math.random() * 1200);
-
-        return { ok: true, order };
+    const unsubOrders = onSnapshot(
+      query(collection(db, 'orders'), where('uid', '==', uid)),
+      (snap) => {
+        const orders = snap.docs
+          .map((d) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              symbol: data.symbol,
+              side: data.side,
+              type: data.type,
+              qty: data.qty,
+              price: data.price,
+              status: data.status,
+              createdAt: toIso(data.createdAt) || new Date().toISOString(),
+              matchedAt: toIso(data.matchedAt),
+            };
+          })
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        set({ orders });
       },
+      () => {}
+    );
 
-      cancelOrder: (id, { onCash } = {}) => {
-        set((s) => {
-          const target = s.orders.find((o) => o.id === id);
-          if (!target || target.status !== 'pending') return {};
-          if (target.side === 'BUY' && onCash) onCash(target.qty * target.price);
-          return { orders: s.orders.map((o) => (o.id === id ? { ...o, status: 'cancelled' } : o)) };
+    const unsubHoldings = onSnapshot(
+      collection(db, 'holdings', uid, 'positions'),
+      (snap) => {
+        const holdings = {};
+        snap.forEach((d) => {
+          const data = d.data();
+          if (data.qty > 0) holdings[d.id] = data;
         });
+        set({ holdings });
       },
-    }),
-    { name: 'trading-orders' }
-  )
-);
+      () => {}
+    );
+
+    set({ _unsubOrders: unsubOrders, _unsubHoldings: unsubHoldings });
+  },
+
+  unsubscribe: () => {
+    if (get()._unsubOrders) get()._unsubOrders();
+    if (get()._unsubHoldings) get()._unsubHoldings();
+    set({ _unsubOrders: null, _unsubHoldings: null, orders: [], holdings: {} });
+  },
+
+  // Places a real order: the backend fetches the live market price, validates
+  // it, and atomically settles cash + holdings in Firestore.
+  placeOrder: async ({ symbol, side, type, qty, price }) => {
+    try {
+      const data = await apiFetch('/api/orders/place', { method: 'POST', body: { symbol, side, type, qty, price } });
+      useAuthStore.getState().refreshProfile();
+      return { ok: true, execPrice: data.execPrice, orderId: data.orderId };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  },
+
+  // Orders settle immediately at the live market price in this simulator
+  // (see api/orders/place.js), so there's nothing pending left to cancel.
+  cancelOrder: async () => ({
+    ok: false,
+    error: 'Lệnh được khớp ngay tại giá thị trường thực khi đặt nên không có trạng thái chờ để huỷ.',
+  }),
+}));

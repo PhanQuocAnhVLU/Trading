@@ -24,7 +24,7 @@ export default function GoogleSignInButton({ onSuccess }) {
     setLoading(true);
     try {
       const result = await signInWithPopup(auth, googleProvider);
-      const outcome = loginWithGoogle(result.user);
+      const outcome = await loginWithGoogle(result.user);
       if (!outcome.ok) {
         setError(outcome.error);
         return;

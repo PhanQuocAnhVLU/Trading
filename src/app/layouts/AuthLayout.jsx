@@ -58,7 +58,7 @@ export default function AuthLayout() {
           </div>
         </div>
 
-        <p className="relative text-xs text-white/35">© 2026 VietTrade Pro — Đồ án học tập, dữ liệu mô phỏng.</p>
+        <p className="relative text-xs text-white/35">© 2026 VietTrade Pro — Dữ liệu thị trường thật, giao dịch bằng tiền ảo.</p>
       </div>
 
       <div className="flex flex-col">

@@ -1,138 +1,146 @@
 import { create } from 'zustand';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import { apiFetch } from '../lib/api';
 import { STOCK_UNIVERSE, INDICES } from '../constants/stockUniverse';
+
+// Maps our display index codes to the codes vnstock-js/VietCap expects.
+// If an index doesn't come back from the API, double-check this mapping
+// against https://vnstock-js-docs.vercel.app/ and adjust here.
+const INDEX_CODE_MAP = { 'VN-INDEX': 'VNINDEX', VN30: 'VN30', 'HNX-INDEX': 'HNXINDEX' };
+
+const POLL_INTERVAL_MS = 5000;
 
 function ceilPrice(ref) { return Math.round((ref * 1.07) / 10) * 10; }
 function floorPrice(ref) { return Math.round((ref * 0.93) / 10) * 10; }
 
-function initQuote(stock) {
-  const ceiling = ceilPrice(stock.ref);
-  const floor = floorPrice(stock.ref);
+function seedQuote(stock) {
   return {
     symbol: stock.symbol,
     name: stock.name,
     sector: stock.sector,
     ref: stock.ref,
-    ceiling,
-    floor,
+    ceiling: ceilPrice(stock.ref),
+    floor: floorPrice(stock.ref),
     price: stock.ref,
     prevPrice: stock.ref,
     open: stock.ref,
     high: stock.ref,
     low: stock.ref,
-    volume: Math.floor(500_000 + Math.random() * 2_000_000),
+    volume: 0,
     change: 0,
     changePct: 0,
-    bids: makeBook(stock.ref, 'bid'),
-    asks: makeBook(stock.ref, 'ask'),
-    history: seedHistory(stock.ref),
-    lastTick: Date.now(),
-    // Foreign trading (khối ngoại) — mock
-    foreignRoomPct: Math.round(10 + Math.random() * 39),
-    foreignBuyVol: Math.floor(50_000 + Math.random() * 400_000),
-    foreignSellVol: Math.floor(50_000 + Math.random() * 400_000),
+    bids: [],
+    asks: [],
+    history: null,
+    lastTick: 0,
+    foreignRoomPct: 0,
+    foreignBuyVol: 0,
+    foreignSellVol: 0,
   };
 }
 
-function makeBook(ref, side) {
-  const rows = [];
-  for (let i = 1; i <= 3; i++) {
-    const step = i * 10 * (side === 'bid' ? -1 : 1);
-    rows.push({
-      price: Math.round((ref + step) / 10) * 10,
-      qty: Math.floor(1000 + Math.random() * 9000),
-    });
-  }
-  return rows;
-}
-
-function seedHistory(ref) {
-  // 30 candles of daily-ish mock history ending at ref
-  const arr = [];
-  let p = ref * (0.9 + Math.random() * 0.05);
-  for (let i = 0; i < 30; i++) {
-    const drift = (Math.random() - 0.48) * ref * 0.015;
-    const open = p;
-    const close = Math.max(1, open + drift);
-    const high = Math.max(open, close) + Math.random() * ref * 0.005;
-    const low = Math.min(open, close) - Math.random() * ref * 0.005;
-    arr.push({ t: i, open, close, high, low, volume: Math.floor(300_000 + Math.random() * 1_500_000) });
-    p = close;
-  }
-  // force last close to ref for continuity
-  arr[arr.length - 1].close = ref;
-  return arr;
-}
-
 const initialQuotes = {};
-STOCK_UNIVERSE.forEach((s) => { initialQuotes[s.symbol] = initQuote(s); });
+STOCK_UNIVERSE.forEach((s) => { initialQuotes[s.symbol] = seedQuote(s); });
 
 const initialIndices = {};
 INDICES.forEach((idx) => { initialIndices[idx.code] = { code: idx.code, value: idx.base, prev: idx.base, change: 0, changePct: 0 }; });
 
+const SYMBOLS = STOCK_UNIVERSE.map((s) => s.symbol);
+const NAME_LOOKUP = Object.fromEntries(STOCK_UNIVERSE.map((s) => [s.symbol, s]));
+
 export const usePriceStore = create((set, get) => ({
   quotes: initialQuotes,
   indices: initialIndices,
+  haltedSymbols: {},
   running: false,
-  haltedSymbols: {}, // symbol -> true when admin has paused trading
+  loaded: false,
+  lastError: null,
+  lastUpdatedAt: null,
 
-  toggleHalt: (symbol) => {
-    set((s) => ({ haltedSymbols: { ...s.haltedSymbols, [symbol]: !s.haltedSymbols[symbol] } }));
-  },
-
+  // Starts polling the real-market backend (/api/market/board) and subscribes
+  // to the live "halted symbols" list controlled by admins in Firestore.
   start: () => {
     if (get().running) return;
     set({ running: true });
-    const tick = () => {
+
+    if (!get()._unsubHalt) {
+      const unsub = onSnapshot(
+        doc(db, 'marketControl', 'halted'),
+        (snap) => set({ haltedSymbols: snap.exists() ? snap.data() : {} }),
+        () => {} // ignore permission errors while signed out
+      );
+      set({ _unsubHalt: unsub });
+    }
+
+    const poll = async () => {
       if (!get().running) return;
-      set((state) => {
-        const quotes = { ...state.quotes };
-        // update a random subset of symbols each tick for a "live" feel
-        const symbols = Object.keys(quotes);
-        const halted = get().haltedSymbols;
-        const subset = symbols.filter((sym) => !halted[sym] && Math.random() < 0.35);
-        subset.forEach((sym) => {
-          const q = quotes[sym];
-          const volatility = q.ref * 0.0015;
-          let next = q.price + (Math.random() - 0.5) * 2 * volatility;
-          next = Math.min(q.ceiling, Math.max(q.floor, next));
-          next = Math.round(next / 10) * 10;
-          const change = next - q.ref;
-          const changePct = (change / q.ref) * 100;
-          quotes[sym] = {
-            ...q,
-            prevPrice: q.price,
-            price: next,
-            high: Math.max(q.high, next),
-            low: Math.min(q.low, next),
-            volume: q.volume + Math.floor(Math.random() * 5000),
-            foreignBuyVol: q.foreignBuyVol + Math.floor(Math.random() * 2000),
-            foreignSellVol: q.foreignSellVol + Math.floor(Math.random() * 2000),
-            change,
-            changePct,
-            bids: makeBook(next, 'bid'),
-            asks: makeBook(next, 'ask'),
-            lastTick: Date.now(),
-          };
-        });
-        // indices derived as weighted-ish average drift
-        const indices = { ...state.indices };
-        Object.keys(indices).forEach((code) => {
-          const idx = indices[code];
-          const drift = (Math.random() - 0.5) * idx.value * 0.0006;
-          const value = Math.max(1, idx.value + drift);
-          const change = value - idx.prev;
-          indices[code] = { ...idx, value, change, changePct: (change / idx.prev) * 100 };
-        });
-        return { quotes, indices };
-      });
-      get()._timer = setTimeout(tick, 1500);
+      try {
+        const symbolsParam = SYMBOLS.join(',');
+        const indicesParam = Object.values(INDEX_CODE_MAP).join(',');
+        const res = await fetch(`/api/market/board?symbols=${symbolsParam}&indices=${indicesParam}`);
+        const data = await res.json();
+        if (data.ok) {
+          set((state) => {
+            const quotes = { ...state.quotes };
+            Object.entries(data.quotes).forEach(([sym, q]) => {
+              if (!q) return;
+              const meta = NAME_LOOKUP[sym];
+              const prev = quotes[sym];
+              quotes[sym] = {
+                ...prev,
+                ...q,
+                symbol: sym,
+                name: meta?.name || prev?.name,
+                sector: meta?.sector || prev?.sector,
+                prevPrice: prev?.price ?? q.price,
+              };
+            });
+            const indices = { ...state.indices };
+            INDICES.forEach((idx) => {
+              const code = INDEX_CODE_MAP[idx.code];
+              const val = data.indices?.[code];
+              if (val) indices[idx.code] = { code: idx.code, ...val };
+            });
+            return { quotes, indices, loaded: true, lastError: null, lastUpdatedAt: data.updatedAt };
+          });
+        } else {
+          set({ lastError: data.error });
+        }
+      } catch (err) {
+        set({ lastError: err.message });
+      }
+      if (get().running) set({ _timer: setTimeout(poll, POLL_INTERVAL_MS) });
     };
-    tick();
+    poll();
   },
 
   stop: () => {
     set({ running: false });
     if (get()._timer) clearTimeout(get()._timer);
+    if (get()._unsubHalt) { get()._unsubHalt(); set({ _unsubHalt: null }); }
+  },
+
+  // Admin-only: toggles a trading halt. The change propagates to every
+  // client through the Firestore listener set up in start().
+  toggleHalt: async (symbol) => {
+    await apiFetch('/api/admin/halt', { method: 'POST', body: { symbol } });
+  },
+
+  // Lazily fetches real OHLCV history for a symbol's candlestick chart.
+  loadHistory: async (symbol, days = 90) => {
+    try {
+      const res = await fetch(`/api/market/history?symbol=${symbol}&days=${days}`);
+      const data = await res.json();
+      if (data.ok) {
+        set((state) => ({
+          quotes: { ...state.quotes, [symbol]: { ...state.quotes[symbol], history: data.candles } },
+        }));
+      }
+      return data;
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
   },
 
   getQuote: (symbol) => get().quotes[symbol],

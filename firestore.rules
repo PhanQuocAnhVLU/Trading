@@ -1,0 +1,36 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Users can read their own profile only. All writes happen server-side
+    // (Firebase Admin SDK in /api routes), so no client writes are allowed here.
+    match /users/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    match /wallets/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    match /holdings/{uid}/positions/{symbol} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // Users can read their own orders (for order history / status).
+    match /orders/{orderId} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.uid;
+      allow write: if false;
+    }
+
+    // Public read of the trading-halt list (any signed-in user can see which
+    // symbols are paused); only the backend (Admin SDK) can write it.
+    match /marketControl/{doc} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+  }
+}

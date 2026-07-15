@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { Star, ArrowLeft } from 'lucide-react';
 import Card from '../../shared/components/Card';
@@ -16,7 +17,12 @@ export default function StockDetailPage() {
   const navigate = useNavigate();
   const q = usePriceStore((s) => s.quotes[symbol]);
   const halted = usePriceStore((s) => !!s.haltedSymbols[symbol]);
+  const loadHistory = usePriceStore((s) => s.loadHistory);
   const { toggleSymbol, isWatched } = useWatchlistStore();
+
+  useEffect(() => {
+    if (symbol) loadHistory(symbol, 120);
+  }, [symbol]);
 
   if (!q) {
     return (
@@ -85,7 +91,11 @@ export default function StockDetailPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card title="Biểu đồ giá — Nến 30 phiên" className="lg:col-span-2">
-          <CandlestickChart history={q.history} height={340} />
+          {q.history ? (
+            <CandlestickChart history={q.history} height={340} />
+          ) : (
+            <div className="h-[340px] flex items-center justify-center text-sm text-text-secondary">Đang tải dữ liệu lịch sử giá thật...</div>
+          )}
         </Card>
 
         <Card title="Sổ lệnh (Order Book)">

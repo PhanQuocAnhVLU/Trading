@@ -17,14 +17,15 @@ export default function TradingPage() {
   const [params, setParams] = useSearchParams();
   const quotes = usePriceStore((s) => s.quotes);
   const haltedSymbols = usePriceStore((s) => s.haltedSymbols);
-  const { user, adjustCash } = useAuthStore();
-  const { orders, holdings, placeOrder, cancelOrder } = useTradingStore();
+  const { user } = useAuthStore();
+  const { orders, holdings, placeOrder } = useTradingStore();
 
   const [symbol, setSymbol] = useState(params.get('symbol') || 'VNM');
   const [side, setSide] = useState(params.get('side') || 'BUY');
   const [qty, setQty] = useState(100);
   const [price, setPrice] = useState('');
   const [message, setMessage] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const q = quotes[symbol];
 
@@ -40,8 +41,6 @@ export default function TradingPage() {
 
   const holding = holdings[symbol];
   const orderValue = qty * (Number(price) || 0);
-  const pendingOrders = orders.filter((o) => o.status === 'pending');
-  const matchedOrders = orders.filter((o) => o.status !== 'pending');
 
   function handleSymbolChange(sym) {
     setSymbol(sym);
@@ -49,7 +48,7 @@ export default function TradingPage() {
     setPrice('');
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
     setMessage(null);
     if (!q) return;
@@ -67,15 +66,13 @@ export default function TradingPage() {
       setMessage({ type: 'error', text: `Giá đặt phải trong khoảng ${formatCurrency(q.floor)} – ${formatCurrency(q.ceiling)}.` });
       return;
     }
-    const result = placeOrder({
-      symbol, side, type: 'LO', qty: numQty, price: numPrice,
-      cashAvailable: user?.cashBalance || 0,
-      onCash: (delta) => adjustCash(delta),
-    });
+    setSubmitting(true);
+    const result = await placeOrder({ symbol, side, type: 'LIMIT', qty: numQty, price: numPrice });
+    setSubmitting(false);
     if (!result.ok) {
       setMessage({ type: 'error', text: result.error });
     } else {
-      setMessage({ type: 'success', text: `Đã đặt lệnh ${side === 'BUY' ? 'MUA' : 'BÁN'} ${numQty} ${symbol} @ ${formatCurrency(numPrice)}. Đang chờ khớp...` });
+      setMessage({ type: 'success', text: `Đã khớp lệnh ${side === 'BUY' ? 'MUA' : 'BÁN'} ${numQty} ${symbol} @ ${formatCurrency(result.execPrice)}.` });
     }
   }
 
@@ -83,7 +80,7 @@ export default function TradingPage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-bold text-text-primary">Đặt lệnh</h1>
-        <p className="text-sm text-text-secondary mt-1">Lệnh giới hạn (LO) — mô phỏng khớp lệnh sau 2-3 giây.</p>
+        <p className="text-sm text-text-secondary mt-1">Lệnh giới hạn (LO) — khớp ngay theo giá thị trường thực nếu thoả điều kiện giá.</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -140,18 +137,15 @@ export default function TradingPage() {
               <p className={clsx('text-sm', message.type === 'error' ? 'text-danger' : 'text-success')}>{message.text}</p>
             )}
 
-            <Button type="submit" variant={side === 'BUY' ? 'buy' : 'sell'} className="w-full" disabled={!!haltedSymbols[symbol]}>
-              Đặt lệnh {side === 'BUY' ? 'MUA' : 'BÁN'}
+            <Button type="submit" variant={side === 'BUY' ? 'buy' : 'sell'} className="w-full" disabled={!!haltedSymbols[symbol] || submitting}>
+              {submitting ? 'Đang gửi lệnh...' : `Đặt lệnh ${side === 'BUY' ? 'MUA' : 'BÁN'}`}
             </Button>
           </form>
         </Card>
 
         <div className="lg:col-span-2 space-y-4">
-          <Card title={`Sổ lệnh trong ngày (${pendingOrders.length} đang chờ)`} padded={false}>
-            <OrderTable orders={pendingOrders} onCancel={(id) => cancelOrder(id, { onCash: (d) => adjustCash(d) })} showCancel />
-          </Card>
           <Card title="Lịch sử lệnh" padded={false}>
-            <OrderTable orders={matchedOrders} />
+            <OrderTable orders={orders} />
           </Card>
         </div>
       </div>

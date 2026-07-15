@@ -7,6 +7,8 @@ import TickerTape from '../../shared/components/TickerTape';
 import { usePriceStore } from '../../shared/store/priceStore';
 import { useUIStore } from '../../shared/store/uiStore';
 import { useAlertStore } from '../../features/alerts/store/alertStore';
+import { useAuthStore } from '../../features/auth/store/authStore';
+import { useTradingStore } from '../../features/trading/store/tradingStore';
 
 export default function AppLayout() {
   const start = usePriceStore((s) => s.start);
@@ -16,12 +18,20 @@ export default function AppLayout() {
   const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
   const initTheme = useUIStore((s) => s.initTheme);
   const location = useLocation();
+  const uid = useAuthStore((s) => s.user?.uid);
+  const subscribeTrading = useTradingStore((s) => s.subscribe);
+  const unsubscribeTrading = useTradingStore((s) => s.unsubscribe);
 
   useEffect(() => {
     initTheme();
     start();
     return () => stop();
   }, []);
+
+  useEffect(() => {
+    subscribeTrading(uid);
+    return () => unsubscribeTrading();
+  }, [uid]);
 
   useEffect(() => {
     checkAlerts(quotes);

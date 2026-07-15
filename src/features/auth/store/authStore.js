@@ -1,95 +1,136 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  updateProfile,
+} from 'firebase/auth';
+import { auth } from '../../../shared/lib/firebase';
+import { apiFetch } from '../../../shared/lib/api';
 
-export const useAuthStore = create(
-  persist(
-    (set, get) => ({
-      user: null,
-      users: [], // registered mock accounts: { email, password, fullName, accountNo, banned }
+function mapAuthError(err) {
+  const code = err?.code || '';
+  const map = {
+    'auth/email-already-in-use': 'Email đã được đăng ký.',
+    'auth/invalid-email': 'Email không hợp lệ.',
+    'auth/weak-password': 'Mật khẩu cần tối thiểu 6 ký tự.',
+    'auth/user-not-found': 'Email hoặc mật khẩu không đúng.',
+    'auth/wrong-password': 'Email hoặc mật khẩu không đúng.',
+    'auth/invalid-credential': 'Email hoặc mật khẩu không đúng.',
+    'auth/too-many-requests': 'Bạn thử sai quá nhiều lần. Vui lòng thử lại sau ít phút.',
+  };
+  return map[code] || err?.message || 'Đã xảy ra lỗi. Vui lòng thử lại.';
+}
 
-      register: ({ email, password, fullName }) => {
-        const exists = get().users.some((u) => u.email === email);
-        if (exists) return { ok: false, error: 'Email đã được đăng ký.' };
-        const accountNo = '069C' + Math.floor(100000 + Math.random() * 900000);
-        const newUser = { email, password, fullName, accountNo, role: 'investor', cashBalance: 200_000_000, banned: false };
-        set((s) => ({ users: [...s.users, newUser] }));
-        return { ok: true };
-      },
+function composeUser(fbUser, data) {
+  const isGoogle = (fbUser.providerData || []).some((p) => p.providerId === 'google.com');
+  return {
+    uid: fbUser.uid,
+    email: data.profile.email,
+    fullName: data.profile.fullName,
+    accountNo: data.profile.accountNo,
+    role: data.profile.role,
+    banned: data.profile.banned,
+    cashBalance: data.cashBalance,
+    authProvider: isGoogle ? 'google' : 'password',
+  };
+}
 
-      login: ({ email, password }) => {
-        // Demo admin shortcut
-        if (email === 'admin@demo.vn' && password === 'admin123') {
-          const admin = { email, fullName: 'Quản trị viên', accountNo: 'ADMIN001', role: 'admin', cashBalance: 0 };
-          set({ user: admin });
-          return { ok: true };
-        }
-        const found = get().users.find((u) => u.email === email && u.password === password);
-        if (!found) return { ok: false, error: 'Email hoặc mật khẩu không đúng.' };
-        if (found.banned) return { ok: false, error: 'Tài khoản đã bị tạm khoá. Vui lòng liên hệ quản trị viên.' };
-        set({ user: found });
-        return { ok: true };
-      },
+export const useAuthStore = create((set, get) => ({
+  user: null,
+  authLoading: true,
+  users: [], // admin: full user list
 
-      loginWithGoogle: (firebaseUser) => {
-        const { email, displayName, uid } = firebaseUser;
-        const existing = get().users.find((u) => u.email === email);
-        if (existing) {
-          if (existing.banned) return { ok: false, error: 'Tài khoản đã bị tạm khoá. Vui lòng liên hệ quản trị viên.' };
-          set({ user: existing });
-          return { ok: true };
-        }
-        const accountNo = '069C' + Math.floor(100000 + Math.random() * 900000);
-        const newUser = {
-          email,
-          fullName: displayName || email.split('@')[0],
-          accountNo,
-          role: 'investor',
-          cashBalance: 200_000_000,
-          banned: false,
-          authProvider: 'google',
-          uid,
-        };
-        set((s) => ({ users: [...s.users, newUser], user: newUser }));
-        return { ok: true };
-      },
+  // Called once at app startup to restore session state.
+  init: () => {
+    onAuthStateChanged(auth, async (fbUser) => {
+      if (!fbUser) { set({ user: null, authLoading: false }); return; }
+      try {
+        const data = await apiFetch('/api/account/me', { method: 'POST', body: { fullName: fbUser.displayName } });
+        set({ user: composeUser(fbUser, data), authLoading: false });
+      } catch {
+        set({ user: null, authLoading: false });
+      }
+    });
+  },
 
-      logout: () => set({ user: null }),
+  refreshProfile: async () => {
+    if (!auth.currentUser) return;
+    try {
+      const data = await apiFetch('/api/account/me', { method: 'GET' });
+      set((s) => (s.user ? { user: { ...s.user, cashBalance: data.cashBalance, banned: data.profile.banned, fullName: data.profile.fullName } } : {}));
+    } catch { /* keep last known state */ }
+  },
 
-      updateUser: (patch) => {
-        set((s) => {
-          if (!s.user) return {};
-          const updatedUser = { ...s.user, ...patch };
-          const users = s.users.map((u) => (u.email === s.user.email ? { ...u, ...patch } : u));
-          return { user: updatedUser, users };
-        });
-      },
+  register: async ({ email, password, fullName }) => {
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, email, password);
+      if (fullName) await updateProfile(cred.user, { displayName: fullName });
+      const data = await apiFetch('/api/account/me', { method: 'POST', body: { fullName } });
+      set({ user: composeUser(cred.user, data) });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: mapAuthError(err) };
+    }
+  },
 
-      adjustCash: (delta) => {
-        set((s) => {
-          if (!s.user) return {};
-          const updatedUser = { ...s.user, cashBalance: (s.user.cashBalance || 0) + delta };
-          const users = s.users.map((u) => (u.email === s.user.email ? updatedUser : u));
-          return { user: updatedUser, users };
-        });
-      },
+  login: async ({ email, password }) => {
+    try {
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      const data = await apiFetch('/api/account/me', { method: 'POST', body: {} });
+      set({ user: composeUser(cred.user, data) });
+      return { ok: true };
+    } catch (err) {
+      if (err?.statusCode === 403 || /tạm khoá/.test(err?.message || '')) {
+        await signOut(auth);
+        return { ok: false, error: err.message };
+      }
+      return { ok: false, error: mapAuthError(err) };
+    }
+  },
 
-      // ---- Admin-only actions (act on any account, independent of current session) ----
-      adminToggleBan: (email) => {
-        set((s) => ({
-          users: s.users.map((u) => (u.email === email ? { ...u, banned: !u.banned } : u)),
-        }));
-      },
+  loginWithGoogle: async (firebaseUser) => {
+    try {
+      const data = await apiFetch('/api/account/me', { method: 'POST', body: { fullName: firebaseUser.displayName } });
+      set({ user: composeUser(firebaseUser, data) });
+      return { ok: true };
+    } catch (err) {
+      await signOut(auth);
+      return { ok: false, error: err.message || 'Không thể đăng nhập.' };
+    }
+  },
 
-      adminAdjustCash: (email, delta) => {
-        set((s) => ({
-          users: s.users.map((u) => (u.email === email ? { ...u, cashBalance: (u.cashBalance || 0) + delta } : u)),
-        }));
-      },
+  logout: async () => {
+    await signOut(auth);
+    set({ user: null });
+  },
 
-      adminDeleteUser: (email) => {
-        set((s) => ({ users: s.users.filter((u) => u.email !== email) }));
-      },
-    }),
-    { name: 'trading-auth' }
-  )
-);
+  updateUser: async (patch) => {
+    try {
+      await apiFetch('/api/account/me', { method: 'PATCH', body: patch });
+      set((s) => (s.user ? { user: { ...s.user, ...patch } } : {}));
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  },
+
+  // ---- Admin-only actions ----
+  fetchUsers: async () => {
+    const data = await apiFetch('/api/admin/users');
+    set({ users: data.users });
+  },
+  adminToggleBan: async (uid) => {
+    await apiFetch('/api/admin/ban', { method: 'POST', body: { uid } });
+    await get().fetchUsers();
+  },
+  adminAdjustCash: async (uid, delta) => {
+    await apiFetch('/api/admin/adjustCash', { method: 'POST', body: { uid, delta } });
+    await get().fetchUsers();
+  },
+  adminDeleteUser: async (uid) => {
+    await apiFetch('/api/admin/deleteUser', { method: 'POST', body: { uid } });
+    await get().fetchUsers();
+  },
+}));

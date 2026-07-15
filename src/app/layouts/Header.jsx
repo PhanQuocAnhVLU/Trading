@@ -103,7 +103,7 @@ export default function Header() {
               <button onClick={() => { navigate('/settings'); setShowUser(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-bg-surface text-left">
                 <UserIcon size={15} /> Tài khoản
               </button>
-              <button onClick={() => { logout(); navigate('/login'); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-bg-surface text-left text-danger">
+              <button onClick={async () => { await logout(); navigate('/login'); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-bg-surface text-left text-danger">
                 <LogOut size={15} /> Đăng xuất
               </button>
             </div>

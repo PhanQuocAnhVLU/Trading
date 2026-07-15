@@ -7,13 +7,12 @@ import { useAuthStore } from './store/authStore';
 
 export default function RegisterPage() {
   const register = useAuthStore((s) => s.register);
-  const login = useAuthStore((s) => s.login);
   const navigate = useNavigate();
   const [form, setForm] = useState({ fullName: '', email: '', password: '', confirm: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
     setError('');
     if (!form.fullName || !form.email || !form.password) {
@@ -29,23 +28,19 @@ export default function RegisterPage() {
       return;
     }
     setLoading(true);
-    setTimeout(() => {
-      const result = register(form);
-      if (!result.ok) {
-        setLoading(false);
-        setError(result.error);
-        return;
-      }
-      login({ email: form.email, password: form.password });
-      setLoading(false);
-      navigate('/', { replace: true });
-    }, 500);
+    const result = await register(form);
+    setLoading(false);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    navigate('/', { replace: true });
   }
 
   return (
     <div>
       <h2 className="text-2xl font-bold text-text-primary">Tạo tài khoản</h2>
-      <p className="text-sm text-text-secondary mt-1">Bắt đầu đầu tư với 200.000.000₫ tiền demo.</p>
+      <p className="text-sm text-text-secondary mt-1">Bắt đầu đầu tư với 200.000.000₫ tiền ảo trên dữ liệu thị trường thật.</p>
 
       <div className="mt-6">
         <GoogleSignInButton onSuccess={() => navigate('/', { replace: true })} />

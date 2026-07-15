@@ -21,7 +21,7 @@ export default function AdminLayout() {
         <div className="flex items-center gap-4">
           <span className="text-xs text-text-secondary hidden sm:inline">{user?.email}</span>
           <button
-            onClick={() => { logout(); navigate('/admin/login', { replace: true }); }}
+            onClick={async () => { await logout(); navigate('/admin/login', { replace: true }); }}
             className="flex items-center gap-1.5 text-xs text-text-secondary hover:text-danger transition-colors"
           >
             <LogOut size={14} /> Đăng xuất
