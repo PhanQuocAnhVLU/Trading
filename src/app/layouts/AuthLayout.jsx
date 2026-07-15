@@ -52,7 +52,7 @@ export default function AuthLayout() {
           </div>
 
           <div className="space-y-4 pt-2">
-            <Feature icon={Zap} title="Độ trễ thấp" desc="Cập nhật giá mô phỏng thời gian thực mỗi 1.5 giây" />
+            <Feature icon={Zap} title="Độ trễ thấp" desc="Cập nhật giá thị trường thật mỗi 5 giây" />
             <Feature icon={BarChart3} title="Phân tích chuyên sâu" desc="Biểu đồ nến, sổ lệnh, bản đồ nhiệt thị trường" />
             <Feature icon={ShieldCheck} title="Bảo mật" desc="Xác thực, mã hoá phiên đăng nhập" />
           </div>
